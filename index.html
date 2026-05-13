@@ -42,6 +42,38 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .b-ever{background:#E8F5E9;color:#1B5E20}
 .b-type{background:#EDE7F6;color:#4527A0}
 .empty{text-align:center;padding:40px;color:#999;font-size:14px;grid-column:1/-1}
+
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:#fff;border-radius:20px;width:90%;max-width:400px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+.modal-img{width:100%;height:220px;object-fit:cover;background:#F0F4FF;display:flex;align-items:center;justify-content:center;font-size:80px}
+.modal-img img{width:100%;height:100%;object-fit:cover}
+.modal-body{padding:16px}
+.modal-name{font-size:16px;font-weight:700;color:#1a1a1a;margin-bottom:4px}
+.modal-meta{font-size:12px;color:#888;margin-bottom:12px}
+.modal-badges{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:16px}
+.upload-btn{width:100%;padding:11px;border-radius:10px;border:2px dashed #1B3A6B;background:transparent;color:#1B3A6B;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s}
+.upload-btn:hover{background:#EAF0FB}
+.upload-btn.uploading{opacity:0.6;pointer-events:none}
+.upload-progress{text-align:center;font-size:12px;color:#888;margin-top:8px;min-height:16px}
+.modal-close{width:100%;padding:10px;border:none;background:none;color:#aaa;font-size:13px;cursor:pointer;margin-top:4px}
+
+
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:#fff;border-radius:20px;width:90%;max-width:400px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+.modal-img{width:100%;height:220px;object-fit:cover;background:#F0F4FF;display:flex;align-items:center;justify-content:center;font-size:80px}
+.modal-img img{width:100%;height:100%;object-fit:cover}
+.modal-body{padding:16px}
+.modal-name{font-size:16px;font-weight:700;color:#1a1a1a;margin-bottom:4px}
+.modal-meta{font-size:12px;color:#888;margin-bottom:12px}
+.modal-badges{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:16px}
+.upload-btn{width:100%;padding:11px;border-radius:10px;border:2px dashed #1B3A6B;background:transparent;color:#1B3A6B;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s}
+.upload-btn:hover{background:#EAF0FB}
+.upload-btn.uploading{opacity:0.6;pointer-events:none}
+.upload-progress{text-align:center;font-size:12px;color:#888;margin-top:8px;min-height:16px}
+.modal-close{width:100%;padding:10px;border:none;background:none;color:#aaa;font-size:13px;cursor:pointer;margin-top:4px}
+
 </style>
 </head>
 <body>
@@ -128,9 +160,10 @@ function render(){
   if(!filtered.length){grid.innerHTML='<div class="empty">No plants match your filters</div>';return;}
   grid.innerHTML = filtered.map(p=>{
     const sizes = Array.isArray(p.sizes) ? p.sizes.join(', ') : p.sizes;
-    const img = p.img ? `<img src="${p.img}" style="width:100%;height:100%;object-fit:cover;">` : `<span style="font-size:52px">${p.emoji||'🌿'}</span>`;
-    return `<div class="card">
-      <div class="card-top" style="padding:0">${img}</div>
+    const cUrl = `https://res.cloudinary.com/dv24x0mky/image/upload/epic_plants/${p.name.replace(/[^a-zA-Z0-9_-]/g,'_').substring(0,60)}`;
+    const img = `<img src="${cUrl}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';this.nextSibling.style.display='flex'"><span style="display:none;font-size:52px;width:100%;height:100%;align-items:center;justify-content:center">${p.emoji||'🌿'}</span>`;
+    return `<div class="card" onclick="openModal(p)" style="cursor:pointer">
+      <div class="card-top" style="padding:0;overflow:hidden">${img}</div>
       <div class="card-body">
         <div class="card-name">${p.name}</div>
         <div class="card-sizes">${sizes}${p.price&&p.price!=='—'?' · '+p.price:''}</div>
@@ -145,5 +178,185 @@ function render(){
 }
 render();
 </script>
+
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-img" id="modalImg"></div>
+    <div class="modal-body">
+      <div class="modal-name" id="modalName"></div>
+      <div class="modal-meta" id="modalMeta"></div>
+      <div class="modal-badges" id="modalBadges"></div>
+      <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="uploadImage(event)">
+      <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()">
+        📷 Upload / Change Photo
+      </button>
+      <div class="upload-progress" id="uploadProgress"></div>
+      <button class="modal-close" onclick="document.getElementById('modalOverlay').classList.remove('open')">Close</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+const CLOUD  = "dv24x0mky";
+const PRESET = "epic_plants";
+let currentPlant = null;
+
+function safeName(name) {
+  return name.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 60);
+}
+
+function cloudUrl(name) {
+  return `https://res.cloudinary.com/${CLOUD}/image/upload/epic_plants/${safeName(name)}`;
+}
+
+function openModal(p) {
+  currentPlant = p;
+  const url = cloudUrl(p.name);
+  const imgDiv = document.getElementById('modalImg');
+  imgDiv.innerHTML = `<img src="${url}" onerror="this.parentNode.innerHTML='<span style=\"font-size:80px\">'+(currentPlant.emoji||'🌿')+'</span>'" style="width:100%;height:100%;object-fit:cover">`;
+  document.getElementById('modalName').textContent = p.name;
+  document.getElementById('modalMeta').textContent = (Array.isArray(p.sizes)?p.sizes.join(', '):p.sizes) + (p.price&&p.price!=='—'?' · '+p.price:'');
+  document.getElementById('modalBadges').innerHTML = `
+    <span class="${sunClass(p.sun)}">${sunLabel(p.sun)}</span>
+    <span class="b b-type">${p.type}</span>
+    <span class="${lcClass(p.lifecycle)}">${p.lifecycle}</span>`;
+  document.getElementById('uploadProgress').textContent = '';
+  document.getElementById('uploadBtn').textContent = '📷 Upload / Change Photo';
+  document.getElementById('uploadBtn').classList.remove('uploading');
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal(e) {
+  if(e.target.id === 'modalOverlay') document.getElementById('modalOverlay').classList.remove('open');
+}
+
+async function uploadImage(event) {
+  const file = event.target.files[0];
+  if(!file || !currentPlant) return;
+  const btn = document.getElementById('uploadBtn');
+  const progress = document.getElementById('uploadProgress');
+  btn.textContent = '⏳ Uploading...';
+  btn.classList.add('uploading');
+  progress.textContent = 'Uploading to cloud...';
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('upload_preset', PRESET);
+  fd.append('public_id', 'epic_plants/' + safeName(currentPlant.name));
+  fd.append('overwrite', 'true');
+  try {
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {method:'POST', body:fd});
+    const data = await res.json();
+    if(data.secure_url) {
+      const imgDiv = document.getElementById('modalImg');
+      imgDiv.innerHTML = `<img src="${data.secure_url}" style="width:100%;height:100%;object-fit:cover">`;
+      progress.textContent = '✅ Photo saved! Visible to everyone.';
+      btn.textContent = '📷 Change Photo';
+      btn.classList.remove('uploading');
+      render();
+    } else {
+      progress.textContent = '❌ Upload failed. Try again.';
+      btn.textContent = '📷 Upload / Change Photo';
+      btn.classList.remove('uploading');
+    }
+  } catch(e) {
+    progress.textContent = '❌ Error: ' + e.message;
+    btn.textContent = '📷 Upload / Change Photo';
+    btn.classList.remove('uploading');
+  }
+  event.target.value = '';
+}
+</script>
+
+
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-img" id="modalImg"></div>
+    <div class="modal-body">
+      <div class="modal-name" id="modalName"></div>
+      <div class="modal-meta" id="modalMeta"></div>
+      <div class="modal-badges" id="modalBadges"></div>
+      <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="uploadImage(event)">
+      <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()">
+        📷 Upload / Change Photo
+      </button>
+      <div class="upload-progress" id="uploadProgress"></div>
+      <button class="modal-close" onclick="document.getElementById('modalOverlay').classList.remove('open')">Close</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+const CLOUD  = "dv24x0mky";
+const PRESET = "epic_plants";
+let currentPlant = null;
+
+function safeName(name) {
+  return name.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 60);
+}
+
+function cloudUrl(name) {
+  return `https://res.cloudinary.com/${CLOUD}/image/upload/epic_plants/${safeName(name)}`;
+}
+
+function openModal(p) {
+  currentPlant = p;
+  const url = cloudUrl(p.name);
+  const imgDiv = document.getElementById('modalImg');
+  imgDiv.innerHTML = `<img src="${url}" onerror="this.parentNode.innerHTML='<span style=\"font-size:80px\">'+(currentPlant.emoji||'🌿')+'</span>'" style="width:100%;height:100%;object-fit:cover">`;
+  document.getElementById('modalName').textContent = p.name;
+  document.getElementById('modalMeta').textContent = (Array.isArray(p.sizes)?p.sizes.join(', '):p.sizes) + (p.price&&p.price!=='—'?' · '+p.price:'');
+  document.getElementById('modalBadges').innerHTML = `
+    <span class="${sunClass(p.sun)}">${sunLabel(p.sun)}</span>
+    <span class="b b-type">${p.type}</span>
+    <span class="${lcClass(p.lifecycle)}">${p.lifecycle}</span>`;
+  document.getElementById('uploadProgress').textContent = '';
+  document.getElementById('uploadBtn').textContent = '📷 Upload / Change Photo';
+  document.getElementById('uploadBtn').classList.remove('uploading');
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal(e) {
+  if(e.target.id === 'modalOverlay') document.getElementById('modalOverlay').classList.remove('open');
+}
+
+async function uploadImage(event) {
+  const file = event.target.files[0];
+  if(!file || !currentPlant) return;
+  const btn = document.getElementById('uploadBtn');
+  const progress = document.getElementById('uploadProgress');
+  btn.textContent = '⏳ Uploading...';
+  btn.classList.add('uploading');
+  progress.textContent = 'Uploading to cloud...';
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('upload_preset', PRESET);
+  fd.append('public_id', 'epic_plants/' + safeName(currentPlant.name));
+  fd.append('overwrite', 'true');
+  try {
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {method:'POST', body:fd});
+    const data = await res.json();
+    if(data.secure_url) {
+      const imgDiv = document.getElementById('modalImg');
+      imgDiv.innerHTML = `<img src="${data.secure_url}" style="width:100%;height:100%;object-fit:cover">`;
+      progress.textContent = '✅ Photo saved! Visible to everyone.';
+      btn.textContent = '📷 Change Photo';
+      btn.classList.remove('uploading');
+      render();
+    } else {
+      progress.textContent = '❌ Upload failed. Try again.';
+      btn.textContent = '📷 Upload / Change Photo';
+      btn.classList.remove('uploading');
+    }
+  } catch(e) {
+    progress.textContent = '❌ Error: ' + e.message;
+    btn.textContent = '📷 Upload / Change Photo';
+    btn.classList.remove('uploading');
+  }
+  event.target.value = '';
+}
+</script>
+
 </body>
 </html>
